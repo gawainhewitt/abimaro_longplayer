@@ -656,38 +656,35 @@ void handlePlayback() {
   DateTime now = rtc.now();
   bool shouldBeAudible = testMode || isActiveHours();
   
-  // Handle volume transitions
-  static bool wasAudible = shouldBeAudible;
+  static bool wasAudible = !shouldBeAudible;  // Force initial update
   
   if (shouldBeAudible != wasAudible) {
     if (shouldBeAudible) {
-      // Entering active hours - fade in
       Serial.println("=== ENTERING ACTIVE HOURS - FADING IN ===");
       setMasterVolume(VOLUME_NORMAL);
     } else {
-      // Leaving active hours - fade out at 23:00
-      if (now.hour() == ACTIVE_HOUR_END && !isFading) {
+      if (!isFading) {
         Serial.println("=== LEAVING ACTIVE HOURS - FADING OUT ===");
         isFading = true;
         fadeStartTime = millis();
-        
-        // Start fade out over 10 seconds
-        if (isPlaying) {
-          trackFade(currentSegment, VOLUME_MUTED, FADE_DURATION, false);
-        }
+        trackFade(currentSegment, VOLUME_MUTED, FADE_DURATION, false);
       }
     }
     wasAudible = shouldBeAudible;
   }
   
-  // Check if fade is complete
-  if (isFading && (millis() - fadeStartTime >= FADE_DURATION)) {
-    isFading = false;
-    Serial.println("Fade complete - now muted");
+  // Always enforce correct volume as a safety net (every 5 seconds)
+  static unsigned long lastVolumeEnforce = 0;
+  if (!isFading && (millis() - lastVolumeEnforce >= 5000)) {
+    setMasterVolume(shouldBeAudible ? VOLUME_NORMAL : VOLUME_MUTED);
+    lastVolumeEnforce = millis();
   }
   
-  // Sequential playback is handled by checkWavTriggerSerial() 
-  // which listens for track end notifications
+  if (isFading && (millis() - fadeStartTime >= FADE_DURATION)) {
+    isFading = false;
+    setMasterVolume(VOLUME_MUTED);
+    Serial.println("Fade complete - now muted");
+  }
 }
 
 void checkWavTriggerSerial() {
